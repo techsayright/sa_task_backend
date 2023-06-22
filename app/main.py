@@ -4,6 +4,7 @@ import boto3
 import time
 from .database import engine, get_db
 from . import model
+from .verify_token import verify_google_token
 
 model.Base.metadata.create_all(bind=engine)
 
@@ -12,7 +13,9 @@ app = FastAPI()
 supported_format = ['jpg', 'png', 'jpeg']
 
 @app.post("/upload_image")
-async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db), data: str = Depends(verify_google_token)):
+
+    print(data, '1')
 
     image_load = await file.read()
 
