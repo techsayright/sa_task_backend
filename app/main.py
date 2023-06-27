@@ -1,25 +1,35 @@
 from fastapi import FastAPI, UploadFile, File, Depends
 from sqlalchemy.orm import Session
+from fastapi.middleware.cors import CORSMiddleware
 import boto3
 import time
 from .database import engine, get_db
 from . import model
 from .verify_token import verify_google_token
-from .schema import ThumbCreate, GetThumbs, ThumbDetail
+from .schema import ThumbCreate
 
 model.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 supported_format = ['jpg', 'png', 'jpeg']
 
 @app.post("/upload_image")
-async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db), data: str = Depends(verify_google_token)):
+# async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db), data: str = Depends(verify_google_token)):
+async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
-    if not data:
-        return {"detail": "Not Authenticated"}
-    else:
-        print(data)
+    # if not data:
+    #     return {"detail": "Not Authenticated"}
+    # else:
+    #     print(data)
 
     image_load = await file.read()
 
@@ -60,15 +70,19 @@ def list_original_imgs(db : Session = Depends(get_db)):
     list_detail = db.query(model.original_img).all()
     return list_detail
 
+@app.get("/list_original_imgs/{id}")
+def list_original_img(id: int, db : Session = Depends(get_db)):
+    data = db.query(model.original_img).filter(model.original_img.id == id).first()
+    return data
 
-@app.post("/get_thumbnails")
-def get_thumbnails(GetThumb: GetThumbs,db : Session = Depends(get_db)):
-    data = db.query(model.thumbnail_img).filter(model.thumbnail_img.original_img_id == GetThumb.original_img_id).distinct(model.thumbnail_img.filename).all()
+@app.get("/get_thumbnails/{id}")
+def get_thumbnails(id: int,db : Session = Depends(get_db)):
+    data = db.query(model.thumbnail_img).filter(model.thumbnail_img.original_img_id == id).distinct(model.thumbnail_img.filename).all()
     return data 
 
-@app.post("/thumb_details")
-def thumb_details(ThumbDetails: ThumbDetail, db : Session = Depends(get_db)):
-    data = db.query(model.thumbnail_img).filter(model.thumbnail_img.id == ThumbDetails.thumb_id).first()
+@app.get("/thumb_details/{id}")
+def thumb_details(id: int, db : Session = Depends(get_db)):
+    data = db.query(model.thumbnail_img).filter(model.thumbnail_img.id == id).first()
     return data
 
 
