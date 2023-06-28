@@ -51,7 +51,7 @@ def lambda_handler(event, context):
             "key": resized_image_key,
             "thumb_size": len(resized_image_bytes.getvalue())
         })
-        api_res = requests.post("http://0.tcp.in.ngrok.io:13729/stored_thumbnails", headers={"Content-Type": "application/json"}, data=req_data)
+        api_res = requests.post("http://0.tcp.in.ngrok.io:16473/stored_thumbnails", headers={"Content-Type": "application/json"}, data=req_data)
 
         if api_res.status_code != 200:
             print("Error storing image:", resized_image_key)

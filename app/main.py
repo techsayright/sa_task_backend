@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, Depends
+from fastapi import FastAPI, UploadFile, File, Depends, status, HTTPException
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 import boto3
@@ -20,11 +20,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+client = boto3.client('s3', region_name='us-east-1')
+
 supported_format = ['jpg', 'png', 'jpeg']
 
 @app.post("/upload_image")
-# async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db), data: str = Depends(verify_google_token)):
-async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
+async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db), data: str = Depends(verify_google_token)):
+# async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
 
     # if not data:
     #     return {"detail": "Not Authenticated"}
@@ -38,7 +40,6 @@ async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_d
 
     key_file_name = round(time.time()*1000)
 
-    client = boto3.client('s3', region_name='us-east-1')
     client.put_object(Body=image_load, Bucket='sa-task-imges', Key=f'{key_file_name}.{file.filename.split(".")[-1]}', ContentType= file.headers['content-type'], ACL = 'public-read')
 
     print(f'https://sa-task-imges.s3.amazonaws.com/{key_file_name}.{file.filename.split(".")[-1]}')
@@ -66,23 +67,52 @@ def stored_thumbnails(new_thumb : ThumbCreate, db : Session = Depends(get_db)):
 
 
 @app.get("/list_original_imgs")
-def list_original_imgs(db : Session = Depends(get_db)):
+def list_original_imgs(db : Session = Depends(get_db),data: str = Depends(verify_google_token)):
     list_detail = db.query(model.original_img).all()
     return list_detail
 
 @app.get("/list_original_imgs/{id}")
-def list_original_img(id: int, db : Session = Depends(get_db)):
+def list_original_img(id: int, db : Session = Depends(get_db), data: str = Depends(verify_google_token)):
     data = db.query(model.original_img).filter(model.original_img.id == id).first()
     return data
 
 @app.get("/get_thumbnails/{id}")
-def get_thumbnails(id: int,db : Session = Depends(get_db)):
+def get_thumbnails(id: int,db : Session = Depends(get_db), data: str = Depends(verify_google_token)):
     data = db.query(model.thumbnail_img).filter(model.thumbnail_img.original_img_id == id).distinct(model.thumbnail_img.filename).all()
     return data 
 
 @app.get("/thumb_details/{id}")
-def thumb_details(id: int, db : Session = Depends(get_db)):
+def thumb_details(id: int, db : Session = Depends(get_db), data: str = Depends(verify_google_token)):
     data = db.query(model.thumbnail_img).filter(model.thumbnail_img.id == id).first()
     return data
+
+@app.get("/delete_image/{id}")
+def delete_image(id: int, db : Session = Depends(get_db),data: str = Depends(verify_google_token)):
+    img_data = db.query(model.original_img).filter(model.original_img.id == id)
+
+    if not img_data.first():
+        raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail=f"requested id {id} for delete image was not found!")
+    
+    img_key = img_data.first().stored_filename
+
+    client.delete_object(Bucket='sa-task-imges', Key=img_key)
+
+    thumb_data = db.query(model.thumbnail_img).filter(model.thumbnail_img.original_img_id == id)
+
+    if not thumb_data.first():
+        img_data.delete(synchronize_session=False)
+        db.commit()
+        raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail="its thumbnails not found!")
+    
+    thumb_key= thumb_data.all()
+
+    for i,v in enumerate(thumb_key):
+        client.delete_object(Bucket='sa-task-imges-thumbnails', Key=v.__dict__['filename'])
+
+    img_data.delete(synchronize_session=False)
+    db.commit()
+
+    return {"detail":"success"}
+
 
 
